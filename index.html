@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nexus AI — Smart Multi-Model Router</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg:#07080f; --surface:#0e101a; --surface2:#141725;
+      --border:rgba(255,255,255,0.07); --border-bright:rgba(255,255,255,0.15);
+      --text:#f0f2ff; --muted:#6b7099; --accent:#7c6af7; --accent2:#4fd1c5;
+      --green:#56e0a0; --red:#ff6b7a; --orange:#f6a623;
+      --glow:0 0 40px rgba(124,106,247,0.25);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+    body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:0;}
+    .blob{position:fixed;border-radius:50%;filter:blur(120px);opacity:0.1;pointer-events:none;z-index:0;}
+    .blob-1{width:600px;height:600px;background:#7c6af7;top:-200px;left:-200px;}
+    .blob-2{width:500px;height:500px;background:#4fd1c5;bottom:-100px;right:-100px;}
+
+    /* ── Navbar ── */
+    nav{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid var(--border);background:rgba(7,8,15,0.8);backdrop-filter:blur(12px);}
+    .nav-logo{display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif;font-size:18px;font-weight:800;}
+    .nav-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 10px var(--accent);}
+    .nav-right{display:flex;align-items:center;gap:12px;}
+    .usage-bar-wrap{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);}
+    .usage-bar{width:80px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;}
+    .usage-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;transition:width 0.4s;}
+    .usage-fill.warning{background:linear-gradient(90deg,var(--orange),var(--red));}
+    .user-chip{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:100px;border:1px solid var(--border);background:var(--surface);font-size:13px;}
+    .user-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;}
+    .btn-nav{padding:7px 16px;border-radius:100px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;}
+    .btn-nav:hover{border-color:var(--border-bright);background:var(--surface2);}
+    .btn-nav-accent{background:var(--accent);border-color:var(--accent);color:white;box-shadow:0 2px 12px rgba(124,106,247,0.3);}
+    .btn-nav-accent:hover{background:#6a58e0;border-color:#6a58e0;}
+
+    /* ── Guest warning banner ── */
+    #guest-banner{display:none;position:relative;z-index:5;background:rgba(246,166,35,0.08);border-bottom:1px solid rgba(246,166,35,0.2);padding:10px 32px;text-align:center;font-size:13px;color:var(--orange);}
+    #guest-banner strong{font-family:'Syne',sans-serif;}
+    #guest-banner a{color:var(--accent);cursor:pointer;text-decoration:underline;margin-left:6px;}
+
+    /* ── Limit modal ── */
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:100;align-items:center;justify-content:center;}
+    .modal-overlay.show{display:flex;}
+    .modal{background:var(--surface);border:1px solid var(--border-bright);border-radius:24px;padding:40px;max-width:400px;width:90%;text-align:center;box-shadow:var(--glow);}
+    .modal-icon{font-size:48px;margin-bottom:16px;}
+    .modal h2{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:10px;}
+    .modal p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:24px;}
+    .modal-btns{display:flex;gap:10px;justify-content:center;}
+    .btn-modal-primary{padding:12px 24px;border:none;border-radius:12px;background:linear-gradient(135deg,#7c6af7,#5d4fe0);color:white;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(124,106,247,0.35);transition:all 0.2s;}
+    .btn-modal-primary:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(124,106,247,0.5);}
+    .btn-modal-ghost{padding:12px 24px;border:1px solid var(--border);border-radius:12px;background:transparent;color:var(--muted);font-size:14px;cursor:pointer;transition:all 0.2s;}
+    .btn-modal-ghost:hover{border-color:var(--border-bright);color:var(--text);}
+
+    /* ── Main content ── */
+    .wrap{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:40px 24px 80px;}
+    header{text-align:center;margin-bottom:48px;}
+    .logo-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(124,106,247,0.12);border:1px solid rgba(124,106,247,0.3);border-radius:100px;padding:6px 16px;font-size:12px;font-weight:500;color:#a89ff9;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:20px;}
+    .logo-dot2{width:6px;height:6px;background:var(--accent);border-radius:50%;animation:blink 2s ease-in-out infinite;}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+    h1{font-family:'Syne',sans-serif;font-size:clamp(36px,7vw,64px);font-weight:800;line-height:0.95;letter-spacing:-0.03em;margin-bottom:14px;}
+    .accent-word{background:linear-gradient(135deg,#7c6af7,#4fd1c5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+    .subtitle{color:var(--muted);font-size:16px;font-weight:300;max-width:460px;margin:0 auto;line-height:1.6;}
+    .topics-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:24px;}
+    .topic-pill{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:100px;border:1px solid var(--border);background:var(--surface);font-size:12px;color:var(--muted);font-weight:500;}
+    .providers-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px;}
+    .provider-badge{display:flex;align-items:center;gap:5px;padding:4px 12px;border-radius:100px;font-size:11px;font-weight:600;}
+    .provider-gemini{background:rgba(66,133,244,0.12);border:1px solid rgba(66,133,244,0.3);color:#7ab3f7;}
+    .provider-openai{background:rgba(16,163,127,0.12);border:1px solid rgba(16,163,127,0.3);color:#4fd1a5;}
+    .provider-groq{background:rgba(246,100,35,0.12);border:1px solid rgba(246,100,35,0.3);color:#f69060;}
+
+    /* ── Input ── */
+    .input-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;margin-bottom:24px;transition:border-color 0.3s;}
+    .input-card:focus-within{border-color:var(--border-bright);box-shadow:var(--glow);}
+    .input-label{font-family:'Syne',sans-serif;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+    textarea{width:100%;background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:16px;font-weight:300;line-height:1.65;resize:none;min-height:90px;}
+    textarea::placeholder{color:rgba(107,112,153,0.5);}
+    .input-footer{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;}
+    .topic-detector{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+    #detected-topic{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;background:rgba(124,106,247,0.15);border:1px solid rgba(124,106,247,0.3);color:#a89ff9;font-weight:500;font-size:12px;}
+    .btn-submit{display:flex;align-items:center;gap:8px;padding:11px 22px;border-radius:12px;border:none;background:linear-gradient(135deg,#7c6af7,#5d4fe0);color:white;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.25s;box-shadow:0 4px 20px rgba(124,106,247,0.35);}
+    .btn-submit:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 28px rgba(124,106,247,0.5);}
+    .btn-submit:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+
+    /* ── Loading ── */
+    #loading{display:none;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px 24px;margin-bottom:24px;text-align:center;}
+    .loading-models{display:flex;justify-content:center;gap:10px;margin-bottom:24px;flex-wrap:wrap;}
+    .loading-model{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:100px;border:1px solid var(--border);background:var(--surface2);font-size:12px;color:var(--muted);}
+    .spin{width:12px;height:12px;border:2px solid rgba(124,106,247,0.3);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loading-text{font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:var(--muted);}
+
+    /* ── Results ── */
+    #results{display:none;}
+    .section-header{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+    .section-header::after{content:'';flex:1;height:1px;background:var(--border);}
+    .best-card{background:var(--surface);border:1px solid rgba(86,224,160,0.3);border-radius:20px;margin-bottom:18px;overflow:hidden;}
+    .best-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid rgba(86,224,160,0.15);background:rgba(86,224,160,0.05);flex-wrap:wrap;gap:8px;}
+    .best-title{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;}
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;}
+    .badge-green{background:rgba(86,224,160,0.15);border:1px solid rgba(86,224,160,0.3);color:var(--green);}
+    .badge-purple{background:rgba(124,106,247,0.15);border:1px solid rgba(124,106,247,0.3);color:#a89ff9;}
+    .badge-blue{background:rgba(66,133,244,0.15);border:1px solid rgba(66,133,244,0.3);color:#7ab3f7;}
+    .badge-teal{background:rgba(16,163,127,0.15);border:1px solid rgba(16,163,127,0.3);color:#4fd1a5;}
+    .badge-orange{background:rgba(246,100,35,0.15);border:1px solid rgba(246,100,35,0.3);color:#f69060;}
+    .best-body{padding:22px;}
+    .answer-text{font-size:15px;font-weight:300;line-height:1.8;color:var(--text);white-space:pre-wrap;word-break:break-word;}
+    .models-grid{display:grid;gap:12px;margin-bottom:18px;}
+    .model-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+    .model-card.is-best{border-color:rgba(86,224,160,0.25);}
+    .model-card-header{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px;}
+    .model-card-header:hover{background:rgba(255,255,255,0.02);}
+    .model-info{display:flex;align-items:center;gap:10px;}
+    .rank-dot{width:24px;height:24px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:10px;font-weight:700;color:var(--muted);flex-shrink:0;}
+    .rank-dot.rank-1{background:rgba(86,224,160,0.15);border-color:rgba(86,224,160,0.4);color:var(--green);}
+    .rank-dot.rank-2{background:rgba(124,106,247,0.15);border-color:rgba(124,106,247,0.3);color:#a89ff9;}
+    .rank-dot.rank-3{background:rgba(79,209,197,0.1);border-color:rgba(79,209,197,0.2);color:var(--accent2);}
+    .model-name{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;}
+    .model-provider{font-size:10px;color:var(--muted);margin-top:1px;}
+    .model-meta{display:flex;align-items:center;gap:8px;}
+    .meta-chip{font-size:11px;color:var(--muted);}
+    .chevron{font-size:11px;color:var(--muted);transition:transform 0.2s;}
+    .model-card.open .chevron{transform:rotate(180deg);}
+    .model-body{display:none;padding:0 16px 16px;border-top:1px solid var(--border);}
+    .model-card.open .model-body{display:block;}
+    .model-body-text{font-size:13px;font-weight:300;line-height:1.75;color:rgba(240,242,255,0.75);white-space:pre-wrap;word-break:break-word;padding-top:12px;max-height:280px;overflow-y:auto;}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
+    .stat-label{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:6px;}
+    .stat-value{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;}
+    #error{display:none;background:rgba(255,107,122,0.07);border:1px solid rgba(255,107,122,0.25);border-radius:14px;padding:16px 20px;margin-bottom:18px;color:var(--red);font-size:13px;}
+    .topic-banner{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;margin-bottom:18px;font-size:13px;}
+    @media(max-width:600px){.stats-row{grid-template-columns:1fr 1fr;}.btn-submit{width:100%;justify-content:center;}}
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <!-- Navbar -->
+  <nav>
+    <div class="nav-logo"><div class="nav-dot"></div>Nexus AI</div>
+    <div class="nav-right">
+      <div class="usage-bar-wrap">
+        <span id="usage-label">— / —</span>
+        <div class="usage-bar"><div class="usage-fill" id="usage-fill" style="width:0%"></div></div>
+      </div>
+      <div id="user-section">
+        <button class="btn-nav btn-nav-accent" onclick="window.location.href='/auth.html'">Sign In</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Guest warning banner -->
+  <div id="guest-banner">
+    <strong id="banner-text">You have 10 free queries.</strong>
+    <a onclick="window.location.href='/auth.html'">Sign up free for 50/day →</a>
+  </div>
+
+  <!-- Limit reached modal -->
+  <div class="modal-overlay" id="limit-modal">
+    <div class="modal">
+      <div class="modal-icon">🔒</div>
+      <h2 id="modal-title">Query Limit Reached</h2>
+      <p id="modal-desc">You've used all your free queries. Sign up for free to get 50 queries per day!</p>
+      <div class="modal-btns">
+        <button class="btn-modal-primary" onclick="window.location.href='/auth.html'">Sign Up Free →</button>
+        <button class="btn-modal-ghost" onclick="closeModal()">Maybe later</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <header>
+      <div class="logo-badge"><div class="logo-dot2"></div>Smart AI Router</div>
+      <h1><span style="display:block">Ask anything.</span><span class="accent-word">Best minds answer.</span></h1>
+      <p class="subtitle">Routes your question to the top AI models for that topic automatically.</p>
+      <div class="topics-row">
+        <div class="topic-pill">📐 Math</div><div class="topic-pill">🏥 Health</div>
+        <div class="topic-pill">💻 Code</div><div class="topic-pill">🔬 Science</div>
+        <div class="topic-pill">📜 History</div><div class="topic-pill">✍️ Creative</div>
+        <div class="topic-pill">💰 Finance</div><div class="topic-pill">🌐 General</div>
+      </div>
+      <div class="providers-row">
+        <div class="provider-badge provider-gemini">🔵 Google Gemini</div>
+        <div class="provider-badge provider-openai">🟢 OpenAI GPT-4o</div>
+        <div class="provider-badge provider-groq">🟠 Groq Llama</div>
+      </div>
+    </header>
+
+    <div class="input-card">
+      <div class="input-label">Your Question</div>
+      <textarea id="prompt" rows="4" placeholder="e.g. What is the derivative of x²?  ·  How do I treat a fever?  ·  Write a React login component…"></textarea>
+      <div class="input-footer">
+        <div class="topic-detector">
+          <span>Detected:</span>
+          <span id="detected-topic">🌐 General</span>
+        </div>
+        <button class="btn-submit" id="askBtn" onclick="submitQuery()">⚡ Ask AI</button>
+      </div>
+    </div>
+
+    <div id="error"></div>
+    <div id="loading">
+      <div class="loading-models" id="loading-models"></div>
+      <div class="loading-text" id="loading-topic-hint">Consulting the best models…</div>
+    </div>
+    <div id="results">
+      <div id="topic-banner-result" class="topic-banner"></div>
+      <div class="section-header">Best Answer</div>
+      <div class="best-card">
+        <div class="best-header">
+          <div class="best-title"><span>🏆</span><span id="best-model-name">—</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span id="best-provider-badge" class="badge"></span>
+            <span id="best-score-badge" class="badge badge-green"></span>
+            <span id="best-latency-badge" class="badge badge-purple"></span>
+          </div>
+        </div>
+        <div class="best-body"><div id="best-content" class="answer-text"></div></div>
+      </div>
+      <div class="section-header" style="margin-top:24px;">All Responses</div>
+      <div class="models-grid" id="models-grid"></div>
+      <div class="section-header" style="margin-top:24px;">Stats</div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Models</div><div class="stat-value" id="stat-models">—</div></div>
+        <div class="stat-card"><div class="stat-label">Providers</div><div class="stat-value" id="stat-providers">—</div></div>
+        <div class="stat-card"><div class="stat-label">Tokens</div><div class="stat-value" id="stat-tokens">—</div></div>
+        <div class="stat-card"><div class="stat-label">Time</div><div class="stat-value" id="stat-time">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Supabase init ──
+    const SUPABASE_URL = 'https://riowwqpzlsusopwcawsl.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpb3d3cXB6bHN1c29wd2Nhd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwODkyODksImV4cCI6MjA4NzY2NTI4OX0.D5WCUlIWL4kvAzVCdJkX4hhrebdURjbHAiaxr8XD924';
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ── State ──
+    let currentUser   = null;
+    let guestCount    = parseInt(localStorage.getItem('nx_guest') || '0');
+    const GUEST_LIMIT = 10;
+    const GUEST_WARN  = 8;
+    const USER_LIMIT  = 50;
+
+    const PROVIDER_STYLES = {
+      gemini:{cls:"badge-blue",  label:"Google Gemini"},
+      openai:{cls:"badge-teal",  label:"OpenAI"},
+      groq:  {cls:"badge-orange",label:"Groq"},
+    };
+    const TOPIC_META = {
+      math:{icon:"📐",label:"Mathematics"},science:{icon:"🔬",label:"Science"},
+      health:{icon:"🏥",label:"Health & Medicine"},coding:{icon:"💻",label:"Coding & Tech"},
+      history:{icon:"📜",label:"History & Culture"},creative:{icon:"✍️",label:"Creative Writing"},
+      finance:{icon:"💰",label:"Finance & Business"},general:{icon:"🌐",label:"General"}
+    };
+    const TOPIC_KEYWORDS = {
+      math:    ["math","equation","solve","algebra","calculus","derivative","integral","matrix","probability","statistics","geometry","proof","formula","calculate","compute","arithmetic","fraction","polynomial","trigonometry","logarithm","vector"],
+      science: ["physics","chemistry","biology","molecule","atom","cell","dna","evolution","quantum","relativity","thermodynamics","gravity","force","energy","reaction","element","orbit","planet","galaxy","photosynthesis","enzyme","protein","gene"],
+      health:  ["health","medical","medicine","doctor","disease","symptom","pain","treatment","diagnosis","hospital","drug","medication","diet","nutrition","exercise","fitness","vitamin","cancer","diabetes","heart","blood","anxiety","depression","sleep","immune","virus","infection","vaccine"],
+      coding:  ["code","program","function","class","variable","algorithm","debug","javascript","python","java","typescript","react","api","database","sql","html","css","git","docker","linux","bash","array","loop","recursion","framework","library","bug","error","compile","deploy","server","frontend","backend","software"],
+      history: ["history","historical","war","empire","civilization","ancient","medieval","renaissance","revolution","battle","king","queen","president","century","dynasty","colonialism","culture","religion","politics","election","democracy","communism","capitalism","treaty","independence"],
+      creative:["write","story","poem","fiction","creative","character","plot","narrative","script","dialogue","imagine","brainstorm","novel","metaphor","haiku","sonnet","essay","article","blog","describe","invent","fantasy","adventure","romance","thriller"],
+      finance: ["money","finance","invest","stock","market","economy","budget","saving","loan","debt","tax","revenue","profit","business","startup","entrepreneur","trade","crypto","bitcoin","inflation","recession","portfolio","dividend","asset"]
+    };
+
+    function detectTopic(text) {
+      const p = text.toLowerCase(), scores = {};
+      for (const [t,w] of Object.entries(TOPIC_KEYWORDS)) scores[t]=w.filter(k=>p.includes(k)).length;
+      const best = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+      return best[0][1]===0?"general":best[0][0];
+    }
+
+    // ── Auth ──
+    async function initAuth() {
+      const { data } = await sb.auth.getSession();
+      currentUser = data.session?.user || null;
+      updateNav();
+      if (!currentUser) updateGuestBanner();
+      sb.auth.onAuthStateChange((_e, session) => {
+        currentUser = session?.user || null;
+        updateNav();
+        if (!currentUser) updateGuestBanner();
+      });
+    }
+
+    function updateNav() {
+      const sec = document.getElementById('user-section');
+      if (currentUser) {
+        const name   = currentUser.user_metadata?.full_name || currentUser.email || 'User';
+        const initials = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+        sec.innerHTML = `
+          <div class="user-chip">
+            <div class="user-avatar">${initials}</div>
+            <span style="font-size:13px">${name.split(' ')[0]}</span>
+          </div>
+          <button class="btn-nav" onclick="signOut()">Sign Out</button>`;
+        document.getElementById('guest-banner').style.display = 'none';
+        updateUsageBar();
+      } else {
+        sec.innerHTML = `<button class="btn-nav btn-nav-accent" onclick="window.location.href='/auth.html'">Sign In</button>`;
+      }
+    }
+
+    async function signOut() {
+      await sb.auth.signOut();
+      window.location.reload();
+    }
+
+    // ── Usage tracking ──
+    async function getDailyUsage() {
+      if (!currentUser) return guestCount;
+      const today = new Date().toISOString().split('T')[0];
+      const key   = `nx_usage_${currentUser.id}_${today}`;
+      return parseInt(localStorage.getItem(key) || '0');
+    }
+
+    async function incrementUsage() {
+      if (!currentUser) {
+        guestCount++;
+        localStorage.setItem('nx_guest', guestCount);
+        updateGuestBanner();
+      } else {
+        const today = new Date().toISOString().split('T')[0];
+        const key   = `nx_usage_${currentUser.id}_${today}`;
+        const cur   = parseInt(localStorage.getItem(key)||'0') + 1;
+        localStorage.setItem(key, cur);
+        updateUsageBar();
+      }
+    }
+
+    function updateUsageBar() {
+      if (!currentUser) return;
+      const today = new Date().toISOString().split('T')[0];
+      const key   = `nx_usage_${currentUser.id}_${today}`;
+      const used  = parseInt(localStorage.getItem(key)||'0');
+      const pct   = Math.min((used/USER_LIMIT)*100,100);
+      document.getElementById('usage-label').textContent = `${used}/${USER_LIMIT}`;
+      const fill = document.getElementById('usage-fill');
+      fill.style.width = pct+'%';
+      fill.className   = 'usage-fill' + (pct>80?' warning':'');
+    }
+
+    function updateGuestBanner() {
+      const banner = document.getElementById('guest-banner');
+      const remaining = GUEST_LIMIT - guestCount;
+      if (guestCount >= GUEST_WARN && guestCount < GUEST_LIMIT) {
+        banner.style.display = 'block';
+        document.getElementById('banner-text').textContent =
+          `⚠️ Only ${remaining} free ${remaining===1?'query':'queries'} left!`;
+        document.getElementById('usage-label').textContent = `${guestCount}/${GUEST_LIMIT}`;
+        const pct  = (guestCount/GUEST_LIMIT)*100;
+        const fill = document.getElementById('usage-fill');
+        fill.style.width = pct+'%';
+        fill.className   = 'usage-fill warning';
+      } else if (guestCount < GUEST_WARN) {
+        banner.style.display = 'none';
+        document.getElementById('usage-label').textContent = `${guestCount}/${GUEST_LIMIT}`;
+        document.getElementById('usage-fill').style.width  = (guestCount/GUEST_LIMIT*100)+'%';
+      }
+    }
+
+    function showLimitModal(isGuest) {
+      document.getElementById('modal-title').textContent = isGuest ? '10 Free Queries Used' : 'Daily Limit Reached';
+      document.getElementById('modal-desc').textContent  = isGuest
+        ? 'You\'ve used your 10 free guest queries. Sign up free to get 50 queries every day!'
+        : 'You\'ve used your 50 queries for today. Come back tomorrow or upgrade your plan.';
+      document.getElementById('limit-modal').classList.add('show');
+    }
+    function closeModal() { document.getElementById('limit-modal').classList.remove('show'); }
+
+    // ── Query ──
+    let startTime = 0;
+
+    async function submitQuery() {
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) { alert('Please enter a question.'); return; }
+
+      // Check limits
+      const used = await getDailyUsage();
+      const limit = currentUser ? USER_LIMIT : GUEST_LIMIT;
+      if (used >= limit) { showLimitModal(!currentUser); return; }
+
+      const btn = document.getElementById('askBtn');
+      btn.disabled = true;
+      document.getElementById('error').style.display  = 'none';
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+      const topic = detectTopic(prompt);
+      const tm    = TOPIC_META[topic];
+      document.getElementById('loading-topic-hint').textContent = `Routing to best models for: ${tm.icon} ${tm.label}`;
+      document.getElementById('loading-models').innerHTML =
+        ["GPT-4o mini","Llama 3.3","Gemini 1.5 Pro","Mixtral","Gemini Flash"]
+        .map(n=>`<div class="loading-model"><div class="spin"></div>${n}</div>`).join('');
+      startTime = Date.now();
+
+      try {
+        const res  = await fetch('/api/query', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error||'Request failed');
+        await incrementUsage();
+        document.getElementById('loading').style.display = 'none';
+        renderResults(data);
+      } catch(err) {
+        document.getElementById('loading').style.display = 'none';
+        const e = document.getElementById('error');
+        e.textContent = '⚠️ ' + err.message; e.style.display = 'block';
+      } finally { btn.disabled = false; }
+    }
+
+    function renderResults(data) {
+      const elapsed = ((Date.now()-startTime)/1000).toFixed(1);
+      const { topic, best, all } = data;
+      const tm = TOPIC_META[topic.key]||TOPIC_META.general;
+      document.getElementById('topic-banner-result').innerHTML =
+        `<span style="font-size:20px">${tm.icon}</span><div><strong style="font-family:'Syne',sans-serif;font-size:13px">${tm.label}</strong><span style="color:var(--muted);font-size:11px;margin-left:8px">Best models selected</span></div>`;
+      document.getElementById('best-model-name').textContent    = best.name;
+      document.getElementById('best-content').textContent       = best.content;
+      document.getElementById('best-score-badge').textContent   = `Score ${best.score.toFixed(2)}`;
+      document.getElementById('best-latency-badge').textContent = `${best.latency}ms`;
+      const ps = PROVIDER_STYLES[best.provider]||{};
+      const pb = document.getElementById('best-provider-badge');
+      pb.textContent=ps.label||best.provider; pb.className=`badge ${ps.cls||'badge-purple'}`;
+
+      const sorted  = [...all].filter(r=>r.success).sort((a,b)=>(b.score||0)-(a.score||0));
+      const failed  = all.filter(r=>!r.success);
+      const ordered = [...sorted,...failed];
+      const grid    = document.getElementById('models-grid');
+      grid.innerHTML='';
+      ordered.forEach((r,i)=>{
+        const ps2=PROVIDER_STYLES[r.provider]||{};
+        const div=document.createElement('div');
+        div.className=`model-card${r.isBest?' is-best':''}`;
+        div.innerHTML=`
+          <div class="model-card-header" onclick="this.parentElement.classList.toggle('open')">
+            <div class="model-info">
+              <div class="rank-dot${i<3?' rank-'+(i+1):''}">${i+1}</div>
+              <div>
+                <div class="model-name">${r.name}${r.isBest?' <span class="badge badge-green" style="margin-left:6px;font-size:9px">Best</span>':''}</div>
+                <div class="model-provider">${ps2.label||r.provider||''}</div>
+              </div>
+            </div>
+            <div class="model-meta">
+              ${r.success?`<span class="badge ${ps2.cls||'badge-purple'}" style="font-size:9px">${ps2.label||''}</span><span class="meta-chip">${r.tokens} tok</span><span class="meta-chip">${r.latency}ms</span>`:'<span style="color:var(--red);font-size:11px">Failed</span>'}
+              <span class="chevron">▼</span>
+            </div>
+          </div>
+          <div class="model-body"><div class="model-body-text">${r.success?escapeHtml(r.content):r.content}</div></div>`;
+        grid.appendChild(div);
+      });
+      const providers=new Set(all.filter(r=>r.success).map(r=>r.provider));
+      document.getElementById('stat-models').textContent   =all.length;
+      document.getElementById('stat-providers').textContent=providers.size;
+      document.getElementById('stat-tokens').textContent   =all.reduce((s,r)=>s+r.tokens,0).toLocaleString();
+      document.getElementById('stat-time').textContent     =elapsed+'s';
+      document.getElementById('results').style.display='block';
+      document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+    }
+
+    function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+    document.getElementById('prompt').addEventListener('input',e=>{
+      const t=detectTopic(e.target.value), m=TOPIC_META[t];
+      document.getElementById('detected-topic').textContent=`${m.icon} ${m.label}`;
+    });
+    document.getElementById('prompt').addEventListener('keydown',e=>{
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitQuery();}
+    });
+
+    initAuth();
+  </script>
+</body>
+</html>
